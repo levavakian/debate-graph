@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debate Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            overflow: hidden;
+        }
+
+        #controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            min-width: 200px;
+        }
+
+        #controls h3 {
+            margin-bottom: 10px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px 0;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        button.secondary {
+            background: #2196F3;
+        }
+
+        button.secondary:hover {
+            background: #1976D2;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        #canvas {
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+        }
+
+        #canvas.grabbing {
+            cursor: grabbing;
+        }
+
+        .statement {
+            cursor: move;
+            user-select: none;
+        }
+
+        .statement rect {
+            fill: white;
+            stroke-width: 2px;
+            transition: fill 0.3s, stroke 0.3s;
+        }
+
+        .statement.valid rect {
+            stroke: #4CAF50;
+            fill: #E8F5E9;
+        }
+
+        .statement.invalid rect {
+            stroke: #F44336;
+            fill: #FFEBEE;
+        }
+
+        .statement.undetermined rect {
+            stroke: #999;
+            fill: #f9f9f9;
+        }
+
+        .statement text {
+            fill: #333;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        .connection {
+            fill: none;
+            stroke: #666;
+            stroke-width: 2px;
+            marker-end: url(#arrowhead);
+        }
+
+        .operator-group {
+            cursor: pointer;
+        }
+
+        .operator-circle {
+            fill: white;
+            stroke: #666;
+            stroke-width: 2px;
+        }
+
+        .operator-text {
+            fill: #333;
+            font-size: 12px;
+            font-weight: bold;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #F44336;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 2000;
+        }
+
+        #toast.show {
+            opacity: 1;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 3000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 300px;
+            max-width: 80%;
+            max-height: 80%;
+            overflow: auto;
+        }
+
+        .modal textarea {
+            width: 100%;
+            min-height: 200px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        #room-info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        #room-code {
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 16px;
+            color: #2196F3;
+        }
+
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1500;
+            display: none;
+        }
+
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .context-menu-item:hover {
+            background: #f0f0f0;
+        }
+
+        .drag-line {
+            stroke: #999;
+            stroke-width: 2px;
+            stroke-dasharray: 5,5;
+            fill: none;
+            pointer-events: none;
+        }
+
+        #connection-prompt {
+            position: fixed;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            padding: 10px;
+            z-index: 1500;
+            display: none;
+        }
+
+        #connection-prompt button {
+            margin: 2px;
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        .statement-edit {
+            position: fixed;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            padding: 10px;
+            z-index: 1500;
+            display: none;
+        }
+
+        .statement-edit input {
+            width: 250px;
+            margin-bottom: 5px;
+        }
+
+        .statement:hover {
+            opacity: 0.8;
+            cursor: pointer;
+        }
+
+        .statement.connecting {
+            stroke-width: 3px !important;
+            stroke: #2196F3 !important;
+        }
+
+        .instructions {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            max-width: 200px;
+            display: none;
+        }
+
+        .instructions.show {
+            display: block;
+        }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "trystero": "https://cdn.jsdelivr.net/npm/trystero@0.21.3/+esm"
+      }
+    }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+</head>
+<body>
+    <div id="controls">
+        <h3>Debate Controls</h3>
+        <div id="room-section">
+            <button id="create-room">Create Room</button>
+            <input type="text" id="join-code" placeholder="Enter room code">
+            <button id="join-room">Join Room</button>
+            <div id="room-info" style="display: none;">
+                Room Code: <span id="room-code"></span>
+                <br>
+                <span id="connection-status">Waiting for peers...</span>
+            </div>
+        </div>
+        <hr style="margin: 10px 0;">
+        <button id="add-statement" class="secondary">Add Statement</button>
+        <button id="export-btn" class="secondary">Export Debate</button>
+        <button id="import-btn" class="secondary">Import Debate</button>
+        <input type="file" id="import-file" accept=".json" style="display: none;">
+        <hr style="margin: 10px 0;">
+        <div style="font-size: 12px; color: #666;">
+            <strong>Instructions:</strong><br>
+            • Double-click canvas to add statement<br>
+            • Hold Shift + drag between statements to connect<br>
+            • Right-click to delete<br>
+            • Double-click statement to edit
+        </div>
+    </div>
+
+    <svg id="canvas">
+        <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                    refX="10" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+            </marker>
+        </defs>
+        <g id="connections"></g>
+        <g id="statements"></g>
+        <line class="drag-line" style="display: none;"></line>
+    </svg>
+
+    <div id="toast"></div>
+
+    <div id="context-menu" class="context-menu">
+        <div class="context-menu-item" data-action="delete">Delete</div>
+    </div>
+
+    <div id="connection-prompt">
+        <div style="margin-bottom: 5px; font-size: 12px;">Select operator:</div>
+        <button data-op="IF_THEN">IF → THEN</button>
+        <button data-op="AND">AND (∧)</button>
+        <button data-op="OR">OR (∨)</button>
+        <button data-op="NOT">NOT (¬)</button>
+        <button data-op="IFF">IFF (↔)</button>
+        <button data-op="XOR">XOR (⊕)</button>
+        <button data-op="NAND">NAND (⊼)</button>
+        <button data-op="NOR">NOR (⊽)</button>
+    </div>
+
+    <div class="statement-edit">
+        <input type="text" id="edit-statement-text">
+        <button id="save-statement-edit">Save</button>
+        <button id="cancel-statement-edit">Cancel</button>
+    </div>
+
+    <div id="export-modal" class="modal">
+        <div class="modal-content">
+            <h3>Export Debate</h3>
+            <textarea id="export-data" readonly></textarea>
+            <button id="copy-export">Copy to Clipboard</button>
+            <button id="download-export">Download as File</button>
+            <button id="close-export">Close</button>
+        </div>
+    </div>
+
+    <div id="instructions" class="instructions">
+        <strong>How to use:</strong><br>
+        • Double-click canvas or use "Add Statement" button<br>
+        • Hold <kbd>Shift</kbd> + drag between statements to connect<br>
+        • Right-click items to delete<br>
+        • Double-click statements to edit text
+        <br><br>
+        <button onclick="this.parentElement.classList.remove('show')" style="font-size: 10px;">Close</button>
+    </div>
+
+    <script type="module">
+        import { joinRoom } from 'trystero';
+        
+        // Global state
+        let state = {
+            statements: {},
+            connections: {}
+        };
+
+        let room = null;
+        let isHost = false;
+        let peers = new Map();
+        let myId = Math.random().toString(36).substr(2, 9);
+        
+        // D3 force simulation
+        let simulation = null;
+        let nodes = [];
+        let links = [];
+
+        // UI state
+        let selectedElement = null;
+        let dragLine = null;
+        let dragStartNode = null;
+        let contextTarget = null;
+        let editingStatement = null;
+
+        // Trystero config
+        const appId = 'debate-viz-' + window.location.hostname;
+
+        // Operators
+        const operators = {
+            IF_THEN: { symbol: '→', eval: (a, b) => !a || b },
+            AND: { symbol: '∧', eval: (a, b) => a && b },
+            OR: { symbol: '∨', eval: (a, b) => a || b },
+            NOT: { symbol: '¬', eval: (a) => !a },
+            IFF: { symbol: '↔', eval: (a, b) => a === b },
+            XOR: { symbol: '⊕', eval: (a, b) => a !== b },
+            NAND: { symbol: '⊼', eval: (a, b) => !(a && b) },
+            NOR: { symbol: '⊽', eval: (a, b) => !(a || b) }
+        };
+
+        // Initialize
+        function init() {
+            setupEventListeners();
+            setupSVGEvents();
+            setupSimulation();
+        }
+
+        // Setup force simulation
+        function setupSimulation() {
+            const svg = d3.select('#canvas');
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            simulation = d3.forceSimulation()
+                .force('link', d3.forceLink().id(d => d.id).distance(150))
+                .force('charge', d3.forceManyBody().strength(-300))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(80))
+                .on('tick', updatePositions);
+        }
+
+        // Update positions during simulation
+        function updatePositions() {
+            nodes.forEach(node => {
+                const statement = state.statements[node.id];
+                if (statement) {
+                    statement.x = node.x;
+                    statement.y = node.y;
+                }
+            });
+            renderGraph();
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('create-room').addEventListener('click', handleCreateRoom);
+            document.getElementById('join-room').addEventListener('click', handleJoinRoom);
+            document.getElementById('export-btn').addEventListener('click', exportDebate);
+            document.getElementById('import-btn').addEventListener('click', () => {
+                document.getElementById('import-file').click();
+            });
+            document.getElementById('import-file').addEventListener('change', importDebate);
+            
+            // Modal controls
+            document.getElementById('close-export').addEventListener('click', () => {
+                document.getElementById('export-modal').style.display = 'none';
+            });
+            document.getElementById('copy-export').addEventListener('click', () => {
+                document.getElementById('export-data').select();
+                document.execCommand('copy');
+                showToast('Copied to clipboard!');
+            });
+            document.getElementById('download-export').addEventListener('click', () => {
+                const data = document.getElementById('export-data').value;
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'debate.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+
+            // Context menu
+            document.addEventListener('click', () => {
+                document.getElementById('context-menu').style.display = 'none';
+            });
+            document.getElementById('context-menu').addEventListener('click', (e) => {
+                if (e.target.dataset.action === 'delete' && contextTarget) {
+                    deleteElement(contextTarget);
+                }
+            });
+
+            // Connection prompt
+            document.querySelectorAll('#connection-prompt button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const op = e.target.dataset.op;
+                    if (op && dragStartNode && dragEndNode) {
+                        createConnection(dragStartNode, dragEndNode, op);
+                    }
+                    document.getElementById('connection-prompt').style.display = 'none';
+                });
+            });
+
+            // Statement edit
+            document.getElementById('save-statement-edit').addEventListener('click', saveStatementEdit);
+            document.getElementById('cancel-statement-edit').addEventListener('click', () => {
+                document.querySelector('.statement-edit').style.display = 'none';
+                editingStatement = null;
+            });
+            document.getElementById('edit-statement-text').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') saveStatementEdit();
+                if (e.key === 'Escape') {
+                    document.querySelector('.statement-edit').style.display = 'none';
+                    editingStatement = null;
+                }
+            });
+
+            // Add statement
+            document.getElementById('add-statement').addEventListener('click', () => {
+                // Create statement at center of visible area
+                const svg = document.getElementById('canvas');
+                const rect = svg.getBoundingClientRect();
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                createStatement(centerX, centerY);
+            });
+
+            // Instructions toggle
+            document.addEventListener('keydown', (e) => {
+                if (e.key === '?' || e.key === 'h') {
+                    document.getElementById('instructions').classList.toggle('show');
+                }
+            });
+        }
+
+        // Setup SVG events
+        function setupSVGEvents() {
+            const svg = d3.select('#canvas');
+            
+            svg.on('dblclick', (event) => {
+                if (event.target.id === 'canvas') {
+                    const point = d3.pointer(event);
+                    createStatement(point[0], point[1]);
+                }
+            });
+
+            svg.on('contextmenu', (event) => {
+                event.preventDefault();
+            });
+        }
+
+        // Create room
+        async function handleCreateRoom() {
+            const roomCode = Math.random().toString(36).substr(2, 6).toUpperCase();
+            isHost = true;
+            
+            room = joinRoom({ appId }, roomCode);
+            setupRoomHandlers();
+            
+            document.getElementById('room-code').textContent = roomCode;
+            document.getElementById('room-info').style.display = 'block';
+            document.getElementById('create-room').style.display = 'none';
+            document.getElementById('join-room').style.display = 'none';
+            document.getElementById('join-code').style.display = 'none';
+            
+            updateConnectionStatus();
+        }
+
+        // Join room
+        async function handleJoinRoom() {
+            const roomCode = document.getElementById('join-code').value.toUpperCase();
+            if (!roomCode) {
+                showToast('Please enter a room code');
+                return;
+            }
+            
+            isHost = false;
+            room = joinRoom({ appId }, roomCode);
+            setupRoomHandlers();
+            
+            document.getElementById('room-code').textContent = roomCode;
+            document.getElementById('room-info').style.display = 'block';
+            document.getElementById('create-room').style.display = 'none';
+            document.getElementById('join-room').style.display = 'none';
+            document.getElementById('join-code').style.display = 'none';
+            
+            updateConnectionStatus();
+        }
+
+        // Setup room handlers
+        function setupRoomHandlers() {
+            const [sendData, getData] = room.makeAction('data');
+            const [sendStateRequest, getStateRequest] = room.makeAction('stateRequest');
+            const [sendStateInit, getStateInit] = room.makeAction('stateInit');
+
+            room.onPeerJoin(peerId => {
+                peers.set(peerId, { id: peerId });
+                updateConnectionStatus();
+                
+                if (isHost) {
+                    // Send current state to new peer
+                    sendStateInit({ type: 'STATE_INIT', state }, peerId);
+                }
+            });
+
+            room.onPeerLeave(peerId => {
+                peers.delete(peerId);
+                updateConnectionStatus();
+            });
+
+            getData((data, peerId) => {
+                if (isHost) {
+                    // Process action and broadcast to all
+                    processAction(data);
+                    sendData(data); // Broadcast to all peers
+                } else {
+                    // Non-host receives updates from host
+                    processAction(data);
+                }
+            });
+
+            getStateRequest((data, peerId) => {
+                if (isHost) {
+                    sendStateInit({ type: 'STATE_INIT', state }, peerId);
+                }
+            });
+
+            getStateInit((data) => {
+                if (data.type === 'STATE_INIT') {
+                    state = data.state;
+                    updateGraph();
+                    renderGraph();
+                }
+            });
+
+            // Store send function for later use
+            window.sendData = sendData;
+            window.sendStateRequest = sendStateRequest;
+        }
+
+        // Update connection status
+        function updateConnectionStatus() {
+            const status = document.getElementById('connection-status');
+            const peerCount = peers.size;
+            if (isHost) {
+                status.textContent = `Hosting (${peerCount} peers connected)`;
+            } else {
+                status.textContent = peerCount > 0 ? 'Connected' : 'Connecting...';
+            }
+        }
+
+        // Process action
+        function processAction(action) {
+            switch (action.type) {
+                case 'ADD_STATEMENT':
+                    state.statements[action.statement.id] = action.statement;
+                    break;
+                case 'UPDATE_STATEMENT':
+                    if (state.statements[action.id]) {
+                        Object.assign(state.statements[action.id], action.updates);
+                    }
+                    break;
+                case 'DELETE_STATEMENT':
+                    delete state.statements[action.id];
+                    // Delete connected connections
+                    Object.keys(state.connections).forEach(connId => {
+                        const conn = state.connections[connId];
+                        if (conn.from === action.id || conn.to === action.id) {
+                            delete state.connections[connId];
+                        }
+                    });
+                    break;
+                case 'ADD_CONNECTION':
+                    state.connections[action.connection.id] = action.connection;
+                    break;
+                case 'DELETE_CONNECTION':
+                    delete state.connections[action.id];
+                    break;
+            }
+            
+            updateGraph();
+            evaluateLogic();
+            renderGraph();
+        }
+
+        // Send action
+        function sendAction(action) {
+            if (!room) {
+                // Local only
+                processAction(action);
+                return;
+            }
+            
+            if (isHost) {
+                processAction(action);
+                window.sendData(action);
+            } else {
+                window.sendData(action);
+            }
+        }
+
+        // Create statement
+        function createStatement(x, y, text = 'New Statement') {
+            const id = 'stmt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            const statement = {
+                id,
+                text,
+                x,
+                y,
+                validity: null,
+                createdBy: myId
+            };
+            
+            sendAction({
+                type: 'ADD_STATEMENT',
+                statement
+            });
+        }
+
+        // Create connection
+        function createConnection(fromId, toId, operator) {
+            // Check for circular dependency
+            if (wouldCreateCycle(fromId, toId)) {
+                showToast('Cannot create connection: would cause circular dependency');
+                return;
+            }
+            
+            const id = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            const connection = {
+                id,
+                from: fromId,
+                to: toId,
+                operator,
+                createdBy: myId
+            };
+            
+            sendAction({
+                type: 'ADD_CONNECTION',
+                connection
+            });
+        }
+
+        // Check if adding edge would create cycle
+        function wouldCreateCycle(from, to) {
+            // Build adjacency list
+            const adj = {};
+            Object.values(state.connections).forEach(conn => {
+                if (!adj[conn.from]) adj[conn.from] = [];
+                adj[conn.from].push(conn.to);
+            });
+            
+            // Add proposed edge
+            if (!adj[from]) adj[from] = [];
+            adj[from].push(to);
+            
+            // DFS to detect cycle
+            const visited = new Set();
+            const recStack = new Set();
+            
+            function hasCycle(node) {
+                visited.add(node);
+                recStack.add(node);
+                
+                const neighbors = adj[node] || [];
+                for (const neighbor of neighbors) {
+                    if (!visited.has(neighbor)) {
+                        if (hasCycle(neighbor)) return true;
+                    } else if (recStack.has(neighbor)) {
+                        return true;
+                    }
+                }
+                
+                recStack.delete(node);
+                return false;
+            }
+            
+            // Check all nodes
+            const allNodes = new Set([
+                ...Object.keys(state.statements),
+                ...Object.values(state.connections).map(c => c.from),
+                ...Object.values(state.connections).map(c => c.to)
+            ]);
+            
+            for (const node of allNodes) {
+                if (!visited.has(node)) {
+                    if (hasCycle(node)) return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // Evaluate logic
+        function evaluateLogic() {
+            // Reset all validities
+            Object.values(state.statements).forEach(stmt => {
+                stmt.validity = null;
+            });
+            
+            // Build dependency graph
+            const incoming = {};
+            const outgoing = {};
+            
+            Object.values(state.connections).forEach(conn => {
+                if (!incoming[conn.to]) incoming[conn.to] = [];
+                if (!outgoing[conn.from]) outgoing[conn.from] = [];
+                incoming[conn.to].push(conn);
+                outgoing[conn.from].push(conn);
+            });
+            
+            // Find statements with no incoming edges (axioms)
+            const axioms = Object.keys(state.statements).filter(id => !incoming[id]);
+            axioms.forEach(id => {
+                state.statements[id].validity = true;
+            });
+            
+            // Topological sort for evaluation order
+            const visited = new Set();
+            const order = [];
+            
+            function visit(nodeId) {
+                if (visited.has(nodeId)) return;
+                visited.add(nodeId);
+                
+                const deps = incoming[nodeId] || [];
+                deps.forEach(conn => visit(conn.from));
+                
+                order.push(nodeId);
+            }
+            
+            Object.keys(state.statements).forEach(visit);
+            
+            // Evaluate in topological order
+            order.forEach(stmtId => {
+                const incomingConns = incoming[stmtId] || [];
+                if (incomingConns.length === 0) return; // Already set as axiom
+                
+                // Evaluate based on incoming connections
+                let validity = null;
+                
+                for (const conn of incomingConns) {
+                    const fromStmt = state.statements[conn.from];
+                    const toStmt = state.statements[stmtId];
+                    
+                    if (fromStmt && fromStmt.validity !== null) {
+                        const op = operators[conn.operator];
+                        let result;
+                        
+                        if (conn.operator === 'NOT') {
+                            // NOT is unary, applies to the from statement
+                            result = op.eval(fromStmt.validity);
+                        } else {
+                            // For binary operators, we need the current validity
+                            if (validity === null) {
+                                // First incoming connection
+                                if (conn.operator === 'IF_THEN') {
+                                    result = op.eval(fromStmt.validity, true); // Assume true for now
+                                } else {
+                                    result = fromStmt.validity; // Start with the from value
+                                }
+                            } else {
+                                result = op.eval(fromStmt.validity, validity);
+                            }
+                        }
+                        
+                        validity = result;
+                    }
+                }
+                
+                if (validity !== null) {
+                    state.statements[stmtId].validity = validity;
+                }
+            });
+        }
+
+        // Update graph data structures
+        function updateGraph() {
+            nodes = Object.values(state.statements).map(stmt => ({
+                id: stmt.id,
+                x: stmt.x,
+                y: stmt.y,
+                fx: stmt.x, // Fix position
+                fy: stmt.y
+            }));
+            
+            links = Object.values(state.connections).map(conn => ({
+                source: conn.from,
+                target: conn.to,
+                operator: conn.operator
+            }));
+            
+            if (simulation) {
+                simulation.nodes(nodes);
+                simulation.force('link').links(links);
+                simulation.alpha(0.3).restart();
+            }
+        }
+
+        // Render graph
+        function renderGraph() {
+            const svg = d3.select('#canvas');
+            
+            // Render connections
+            const connectionsGroup = svg.select('#connections');
+            const connectionElements = connectionsGroup.selectAll('.connection-group')
+                .data(Object.values(state.connections), d => d.id);
+            
+            const connectionEnter = connectionElements.enter()
+                .append('g')
+                .attr('class', 'connection-group');
+            
+            connectionEnter.append('line')
+                .attr('class', 'connection');
+            
+            const operatorGroup = connectionEnter.append('g')
+                .attr('class', 'operator-group')
+                .on('contextmenu', function(event, d) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    showContextMenu(event, { type: 'connection', id: d.id });
+                });
+            
+            operatorGroup.append('circle')
+                .attr('class', 'operator-circle')
+                .attr('r', 20);
+            
+            operatorGroup.append('text')
+                .attr('class', 'operator-text')
+                .attr('dy', '0.35em');
+            
+            connectionElements.exit().remove();
+            
+            // Update connections
+            connectionsGroup.selectAll('.connection-group').each(function(d) {
+                const fromStmt = state.statements[d.from];
+                const toStmt = state.statements[d.to];
+                
+                if (fromStmt && toStmt) {
+                    const line = d3.select(this).select('line');
+                    line.attr('x1', fromStmt.x)
+                        .attr('y1', fromStmt.y)
+                        .attr('x2', toStmt.x)
+                        .attr('y2', toStmt.y);
+                    
+                    const midX = (fromStmt.x + toStmt.x) / 2;
+                    const midY = (fromStmt.y + toStmt.y) / 2;
+                    
+                    const operatorGroup = d3.select(this).select('.operator-group');
+                    operatorGroup.attr('transform', `translate(${midX}, ${midY})`);
+                    
+                    operatorGroup.select('text')
+                        .text(operators[d.operator].symbol);
+                }
+            });
+            
+            // Render statements
+            const statementsGroup = svg.select('#statements');
+            const statementElements = statementsGroup.selectAll('.statement')
+                .data(Object.values(state.statements), d => d.id);
+            
+            const statementEnter = statementElements.enter()
+                .append('g')
+                .attr('class', 'statement')
+                .on('mousedown', startDrag)
+                .on('contextmenu', function(event, d) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    showContextMenu(event, { type: 'statement', id: d.id });
+                })
+                .on('click', function(event, d) {
+                    if (event.detail === 2) { // Double click
+                        editStatement(d.id);
+                    }
+                });
+            
+            statementEnter.append('rect')
+                .attr('rx', 8)
+                .attr('ry', 8);
+            
+            statementEnter.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', '0.35em');
+            
+            statementElements.exit().remove();
+            
+            // Update statements
+            statementsGroup.selectAll('.statement').each(function(d) {
+                const group = d3.select(this);
+                const stmt = state.statements[d.id];
+                
+                group.attr('transform', `translate(${stmt.x}, ${stmt.y})`);
+                
+                // Update validity class
+                group.classed('valid', stmt.validity === true);
+                group.classed('invalid', stmt.validity === false);
+                group.classed('undetermined', stmt.validity === null);
+                
+                // Update text
+                const text = group.select('text').text(stmt.text);
+                const bbox = text.node().getBBox();
+                const padding = 20;
+                
+                group.select('rect')
+                    .attr('x', -(bbox.width + padding) / 2)
+                    .attr('y', -(bbox.height + padding) / 2)
+                    .attr('width', bbox.width + padding)
+                    .attr('height', bbox.height + padding);
+            });
+        }
+
+        // Drag handling
+        let dragEndNode = null;
+        
+        function startDrag(event, d) {
+            if (event.shiftKey) {
+                // Start connection drag
+                event.stopPropagation();
+                dragStartNode = d.id;
+                
+                // Add visual feedback
+                d3.select(event.currentTarget).classed('connecting', true);
+                
+                const dragLine = d3.select('.drag-line');
+                dragLine.style('display', 'block')
+                    .attr('x1', d.x)
+                    .attr('y1', d.y)
+                    .attr('x2', d.x)
+                    .attr('y2', d.y);
+                
+                d3.select('#canvas')
+                    .on('mousemove', dragConnection)
+                    .on('mouseup', endConnectionDrag);
+            } else {
+                // Start position drag
+                const svg = d3.select('#canvas');
+                const startX = event.x - d.x;
+                const startY = event.y - d.y;
+                
+                function drag(event) {
+                    const newX = event.x - startX;
+                    const newY = event.y - startY;
+                    
+                    sendAction({
+                        type: 'UPDATE_STATEMENT',
+                        id: d.id,
+                        updates: { x: newX, y: newY }
+                    });
+                }
+                
+                function endDrag() {
+                    svg.on('mousemove', null);
+                    svg.on('mouseup', null);
+                }
+                
+                svg.on('mousemove', drag);
+                svg.on('mouseup', endDrag);
+            }
+        }
+        
+        function dragConnection(event) {
+            const point = d3.pointer(event);
+            d3.select('.drag-line')
+                .attr('x2', point[0])
+                .attr('y2', point[1]);
+        }
+        
+        function endConnectionDrag(event) {
+            d3.select('#canvas')
+                .on('mousemove', null)
+                .on('mouseup', null);
+            
+            // Remove visual feedback
+            d3.selectAll('.statement').classed('connecting', false);
+            d3.select('.drag-line').style('display', 'none');
+            
+            // Check if we're over a statement
+            const target = event.target;
+            const targetGroup = target.closest('.statement');
+            
+            if (targetGroup && dragStartNode) {
+                const targetData = d3.select(targetGroup).datum();
+                if (targetData && targetData.id !== dragStartNode) {
+                    dragEndNode = targetData.id;
+                    
+                    // Show operator selection
+                    const prompt = document.getElementById('connection-prompt');
+                    prompt.style.display = 'block';
+                    prompt.style.left = event.pageX + 'px';
+                    prompt.style.top = event.pageY + 'px';
+                }
+            }
+            
+            if (!targetGroup) {
+                dragStartNode = null;
+                dragEndNode = null;
+            }
+        }
+
+        // Context menu
+        function showContextMenu(event, target) {
+            contextTarget = target;
+            const menu = document.getElementById('context-menu');
+            menu.style.display = 'block';
+            menu.style.left = event.pageX + 'px';
+            menu.style.top = event.pageY + 'px';
+        }
+
+        // Delete element
+        function deleteElement(target) {
+            if (target.type === 'statement') {
+                sendAction({ type: 'DELETE_STATEMENT', id: target.id });
+            } else if (target.type === 'connection') {
+                sendAction({ type: 'DELETE_CONNECTION', id: target.id });
+            }
+        }
+
+        // Edit statement
+        function editStatement(id) {
+            const stmt = state.statements[id];
+            if (!stmt) return;
+            
+            editingStatement = id;
+            const editor = document.querySelector('.statement-edit');
+            const input = document.getElementById('edit-statement-text');
+            
+            input.value = stmt.text;
+            editor.style.display = 'block';
+            editor.style.left = stmt.x + 'px';
+            editor.style.top = stmt.y + 'px';
+            
+            input.focus();
+            input.select();
+        }
+
+        function saveStatementEdit() {
+            if (!editingStatement) return;
+            
+            const text = document.getElementById('edit-statement-text').value.trim();
+            if (text) {
+                sendAction({
+                    type: 'UPDATE_STATEMENT',
+                    id: editingStatement,
+                    updates: { text }
+                });
+            }
+            
+            document.querySelector('.statement-edit').style.display = 'none';
+            editingStatement = null;
+        }
+
+        // Export/Import
+        function exportDebate() {
+            const exportData = JSON.stringify(state, null, 2);
+            document.getElementById('export-data').value = exportData;
+            document.getElementById('export-modal').style.display = 'flex';
+        }
+
+        function importDebate(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const importedState = JSON.parse(e.target.result);
+                    state = importedState;
+                    updateGraph();
+                    evaluateLogic();
+                    renderGraph();
+                    showToast('Debate imported successfully!');
+                } catch (error) {
+                    showToast('Error importing debate: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+            
+            // Reset file input
+            event.target.value = '';
+        }
+
+        // Toast notification
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Initialize on load
+        window.addEventListener('load', init);
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            
+            if (simulation) {
+                simulation.force('center', d3.forceCenter(width / 2, height / 2));
+                simulation.alpha(0.3).restart();
+            }
+        });
+    </script>
+</body>
+</html>
